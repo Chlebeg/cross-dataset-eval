@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import gc
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.utils import resample
 
 USED_FEATURES_AWID3 = [
     "frame.len", "radiotap.length", "radiotap.dbm_antsignal", "wlan.duration",
@@ -10,14 +11,13 @@ USED_FEATURES_AWID3 = [
     "wlan.fc.type", "wlan.fc.subtype", "wlan.fc.ds", "wlan.fc.frag",
     "wlan.fc.retry", "wlan.fc.pwrmgt", "wlan.fc.moredata", "wlan.fc.protected", "Label"]
 
-USED_FEATURES_AWID3_WO_ANTSIGNAL_AND_FREQ = [
-    "frame.len", "radiotap.length", "wlan.duration",
+USED_FEATURES_AWID3_WO_FREQ = [
+    "frame.len", "radiotap.length", "radiotap.dbm_antsignal", "wlan.duration",
     "radiotap.present.tsft", "radiotap.channel.flags.cck", "radiotap.channel.flags.ofdm",
     "wlan.fc.type", "wlan.fc.subtype", "wlan.fc.ds", "wlan.fc.frag",
     "wlan.fc.retry", "wlan.fc.pwrmgt", "wlan.fc.moredata", "wlan.fc.protected", "Label"]
 
-# rememebr that here the antsingal is dropped
-FEATURES_MIN_MAX_SCALING = ["frame.len", "radiotap.length", "wlan.duration"]
+FEATURES_MIN_MAX_SCALING = ["frame.len", "radiotap.length", "radiotap.dbm_antsignal", "wlan.duration"]
 # rememebr that here the freq is dropped
 FEATURES_ONE_HOT_ENCODING = [
     "radiotap.present.tsft", "radiotap.channel.flags.cck", "radiotap.channel.flags.ofdm",
@@ -26,7 +26,7 @@ FEATURES_ONE_HOT_ENCODING = [
 
 AWID3_DIR = "D:/AWID3/CSV"
 AWID3_DIR_PRE = "D:/AWID3/CSV-pre"
-AWID3_merged = "D:\AWID3\merged_AWID3"
+AWID3_MERGED = "D:\AWID3\merged_AWID3"
 awid3_columns = open("D:/AWID2/code-features/features.txt", "r").read().replace('\n', ' ').split(' ')
 
 ### Dtype dict for preprocessing part - not a final one
@@ -116,6 +116,28 @@ def cycleThoughFiles(dir):
             output_file_path = os.path.join("..", dir+"-pre", f)
             df_preporc.to_csv(output_file_path, index=False)
 
+# def cycleThoughFilesAndListFeatVal(dir):
+#     try:
+#         folders = os.listdir(dir)
+#         dict = {}
+#         for folder in folders:
+#             files = os.listdir(os.path.join(dir, folder))
+#             print(f"Files to cycle: {files}")
+#             for f in files:
+#                 print(f"Right now going through {f}")
+#                 df = loadDataFrame(os.path.join(dir, folder, f))
+#                 df = limitFeatures(df)
+
+#                 for x in FEATURES_ONE_HOT_ENCODING:
+#                     if x not in dict.keys():
+#                         dict[x] = []
+#                     for val in set(df[x]):
+#                         if val not in dict[x]:
+#                             dict[x].append(val)
+#         print(dict)
+#     except:
+#         print(dict)
+
 def concatFiles(dir):
     files = os.listdir(os.path.join(dir))
     dfs = []
@@ -126,12 +148,17 @@ def concatFiles(dir):
         del df
         gc.collect()
 
-    output_file_path = os.path.join(AWID3_merged)
+    output_file_path = os.path.join(AWID3_MERGED)
     final_df = pd.concat(dfs, ignore_index=True)
     final_df.to_csv(output_file_path, index=False)
 
     return final_df
 
+def process_antsig(value):
+    # Split the string by "-" and convert each part to an integer
+    values = [float(v) for v in value.split('-') if v]  # avoid empty splits
+    # Return the value itself if only one, otherwise return the average
+    return abs(values[0]) if len(values) == 1 else abs(sum(values) / len(values))
 
 def preprocessAWID3(df):
     ### Map wlan.fc.ds
@@ -143,8 +170,11 @@ def preprocessAWID3(df):
     ### Map Label
     df["Label"] = df['Label'].map(mapping_label)
 
-    ### For now not sure what to do with antsignal so I'll drop this one
-    df = df[USED_FEATURES_AWID3_WO_ANTSIGNAL_AND_FREQ]
+    ### Find avg from antsignal (for multiple antenas)
+    df["radiotap.dbm_antsignal"] = df["radiotap.dbm_antsignal"].apply(process_antsig)
+
+    ### Dropped freq for now
+    df = df[USED_FEATURES_AWID3_WO_FREQ]
 
     ### Perform min-max scaling
     scaler = MinMaxScaler()
@@ -168,29 +198,64 @@ def preprocessAWID3(df):
     print(f"Saving dataset to {output_file_path}")
     df.to_csv(output_file_path, index=False)
 
+    return df
+
+def underSample(df):
+    # Separate the classes
+    normal_class = df[df['Label'] == 'Normal']
+    flooding_class = df[df['Label'] == 'Flooding']
+    impersonation_class = df[df['Label'] == 'Impersonation']
+
+    class_to_downsample = normal_class
+    # Downsample the normal class x times
+    for x in range(8):
+        downsampled_class = resample(class_to_downsample, 
+                                     replace=False,
+                                     n_samples=int(len(class_to_downsample)*0.75),
+                                     random_state=42
+                                     )
+        class_to_downsample = downsampled_class
+
+    # Combine the downsampled normal class with the other classes
+    df_balanced = pd.concat([downsampled_class, flooding_class, impersonation_class])
+
+    # Shuffle the resulting dataset (optional)
+    df_balanced = df_balanced.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    print(f"Balanced dataset class distribution:\n{df_balanced['Label'].value_counts()}")
+    output_file_path = os.path.join(AWID3_DIR, "..", "ready_AWID3_downsampled")
+    print(f"Saving dataset to {output_file_path}")
+    df_balanced.to_csv(output_file_path, index=False)
+
+    
+
 ### ---------------- Start ----------------
 
 # df = loadDataFrame("D:/AWID3/CSV/12.Evil_Twin/Evil_Twin_56.csv")
 # limitFeatures(df)
 
-# cycleThoughFiles(AWID3_DIR)
-# df = concatFiles(AWID3_DIR_PRE)
+cycleThoughFiles(AWID3_DIR)
+df = concatFiles(AWID3_DIR_PRE)
 
-df = pd.read_csv(AWID3_merged, dtype=dtype_dict_AWID3)
+df = pd.read_csv(AWID3_MERGED, dtype=dtype_dict_AWID3)
 df = preprocessAWID3(df)
 
-# df = pd.read_csv(os.path.join(AWID3_DIR, "..", "ready_AWID3"))
+df = pd.read_csv(os.path.join(AWID3_DIR, "..", "ready_AWID3"))
+underSample(df)
+
 # for x in df.columns:
 #     print(df[x].dtype)
 #     print(f"-----{x}-----\n{df[x].value_counts()}")
 #     print(f"\n")
+
+
 
 ### ------------ General plan -------------
 
 # frame.len w int
 # radiotap.length w int
 # radiotap.dbm_antsignal w int, 
-    # AWID3 trzeba przerobić potrójne liczby        <-------------- A-3 nie wiem co z tym na razie - drop
+    # AWID3 trzeba przerobić potrójne liczby        <-------------- A-3 potencjalnie (avg, mean, first number, min or max)
 # wlan.duration w int
 # radiotap.present.tsft w int, 
     # AWID3 trzeba przerobić potrójne liczby
