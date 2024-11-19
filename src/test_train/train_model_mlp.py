@@ -9,9 +9,14 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.metrics import roc_auc_score
 from sklearn import tree
 import lightgbm as lgb
+from sklearn.neural_network import MLPClassifier
 
-AWID2 = "D:/AWID2/ready_AWID2"
-AWID3 = "D:/AWID3/ready_AWID3_downsampled"
+AWID2 = "/root/learning/AWID2/AWID2_downsampled"
+AWID3 = "/root/learning/AWID3/AWID3_downsampled"
+AWID2_tst = "/root/learning/AWID2/ready_AWID2_downsampled_tst"
+
+AWID2_MERGED = "/root/learning/AWID2/AWID2_merged"
+AWID3_MERGED = "/root/learning/AWID3/AWID3_merged"
 
 def train(df):
     columns = list(df.columns)
@@ -19,17 +24,13 @@ def train(df):
     trn_X = df[columns]
     trn_Y = df["Label"]
     print("Starting to train")
-    model = lgb.LGBMClassifier(
-        learning_rate=0.01,
-        max_depth=10,
-        min_child_samples=30,
-        min_split_gain=0.1,
-        n_estimators=80,
-        num_leaves=20,
-        reg_alpha=0.01,
-        reg_lambda=0.01,
-        n_jobs=1,
-        class_weight="balanced"
+    model = MLPClassifier(
+        solver="adam",
+        hidden_layer_sizes=(30, 20, 16, 12, 6),
+        max_iter=300,
+        random_state=42,
+        batch_size=200,
+        verbose=True
     )
     model.fit(trn_X, trn_Y)
     print("Training ended")
@@ -57,8 +58,8 @@ def test(df, model):
 
 ### ----------- Running commands -----------
 
-train_path = AWID3
-test_path = AWID2
+train_path = AWID2
+test_path = AWID3
 
 train_df = pd.read_csv(train_path).sort_index(axis=1)
 print("------------- Train_df loaded -------------")
@@ -76,3 +77,13 @@ test(test_df, model)
 # print(test_df["Label"].value_counts())
 # print(train_df.columns)
 # print(test_df.columns)
+
+#for x in train_df.columns:
+#    print(train_df[x].dtype)
+#    print(f"-----{x}-----\n{train_df[x].value_counts()}")
+#    print(f"\n")
+
+#for x in test_df.columns:
+#    print(test_df[x].dtype)
+#    print(f"-----{x}-----\n{test_df[x].value_counts()}")
+#    print(f"\n")
