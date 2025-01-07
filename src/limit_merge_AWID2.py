@@ -8,7 +8,7 @@ USED_FEATURES_AWID2 = [
     "wlan.fc.type", "wlan.fc.subtype", "wlan.fc.ds", "wlan.fc.frag",
     "wlan.fc.retry", "wlan.fc.pwrmgt", "wlan.fc.moredata", "wlan.fc.protected", "class"]
 
-ROOT = "/root/learning"
+ROOT = "/home/test"
 AWID_DIR = ROOT + "/AWID2"
 AWID_CSV = AWID_DIR + "/CSV"
 AWID_CSV_PRE = AWID_DIR + "/CSV-pre"
@@ -109,10 +109,10 @@ def concatFiles(dir):
         dfs.append(df)
 
     final_df = pd.concat(dfs, ignore_index=True)
-    output_file_path = os.path.join(AWID_MERGED)
-    print(f"Saving merged dataset to {output_file_path}")
-    final_df.to_csv(output_file_path, index=False)
     return final_df
+
+def process_antsig(value):
+    return float(value)
 
 def preprocessAWID2(df):
     ### Drop all frames with 'injection' class
@@ -123,6 +123,8 @@ def preprocessAWID2(df):
     
     ### Rename class
     df["class"] = df['class'].map(mapping_class)
+
+    df["radiotap.dbm_antsignal"] = df["radiotap.dbm_antsignal"].apply(process_antsig)
 
     ### Change "radiotap.channel.type.cck", "radiotap.channel.type.ofdm" and "class" column names to flags to match AWID3
     df.rename(columns = {'radiotap.channel.type.cck':'radiotap.channel.flags.cck',
@@ -141,9 +143,8 @@ def preprocessAWID2(df):
 ### ---------------- Start ----------------
 
 cycleThoughFiles(TRN_FOLDER)
-cycleThoughFiles(TST_FOLDER, "tst")
 df = concatFiles(AWID_CSV_PRE)
-df = pd.read_csv(AWID_MERGED)
+#df = pd.read_csv(AWID_MERGED)
 df = preprocessAWID2(df)
 
 # for x in df.columns:

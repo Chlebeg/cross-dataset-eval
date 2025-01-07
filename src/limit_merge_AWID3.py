@@ -8,7 +8,7 @@ USED_FEATURES = [
     "wlan.fc.type", "wlan.fc.subtype", "wlan.fc.ds", "wlan.fc.frag",
     "wlan.fc.retry", "wlan.fc.pwrmgt", "wlan.fc.moredata", "wlan.fc.protected", "Label"]
 
-ROOT = "/root/learning"
+ROOT = "/home/test"
 AWID_DIR = ROOT + "/AWID3"
 AWID_CSV = AWID_DIR + "/CSV"
 AWID_CSV_PRE = AWID_DIR + "/CSV-pre"
@@ -72,6 +72,7 @@ def limitFeatures(df):
     
     # Change types of rows to correct ones
     df = df.astype(dtype_dict_AWID3)
+    df["radiotap.dbm_antsignal"] = df["radiotap.dbm_antsignal"].apply(process_antsig)
     return df
 
 def cycleThoughFiles(dir):
@@ -125,10 +126,18 @@ def concatFiles(dir):
     return final_df
 
 def process_antsig(value):
+    # Check if the value is already an integer or float
+    if isinstance(value, (int, float)):
+        return float(round(value/3))
+    # Otherwise, process it as a string
+    values = [float(v) for v in str(value).split('-') if v]  # avoid empty splits
+    return -float(round(sum(values) / len(values)))
+
+def process_antsig_deb(value):
     # Split the string by "-" and convert each part to an integer
     values = [float(v) for v in value.split('-') if v]  # avoid empty splits
     # Return the value itself if only one, otherwise return the average
-    return -values[0] if len(values) == 1 else -float(round(sum(values) / len(values)))
+    return values[0] if len(values) == 1 else float(round(sum(values) / len(values)))
 
 def preprocessAWID3(df):
     ### Map wlan.fc.ds

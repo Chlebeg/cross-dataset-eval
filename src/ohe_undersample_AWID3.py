@@ -13,7 +13,7 @@ FEATURES_ONE_HOT_ENCODING = [
     "wlan.fc.type", "wlan.fc.subtype", "wlan.fc.ds", "wlan.fc.frag",
     "wlan.fc.retry", "wlan.fc.pwrmgt", "wlan.fc.moredata", "wlan.fc.protected"]
 
-ROOT = "/root/learning"
+ROOT = "/home/test"
 AWID_DIR = ROOT + "/AWID3"
 AWID_MERGED = AWID_DIR + "/AWID3_merged"
 AWID_SCALED = AWID_DIR + "/AWID3_scaled"
@@ -30,10 +30,10 @@ def oneHotEncodeAWID3(df):
         df[subtype] = False
     
     ### Save dataset to file
-    output_file_path = os.path.join(AWID_READY)
-    print(f"Saving dataset to {output_file_path}")
-    print(df.columns)
-    df.to_csv(output_file_path, index=False)
+    #output_file_path = os.path.join(AWID_READY)
+    #print(f"Saving dataset to {output_file_path}")
+    #print(df.columns)
+    #df.to_csv(output_file_path, index=False)
 
     return df
 
@@ -47,7 +47,7 @@ def underSample(df):
     downsampled_class = resample(
         normal_class,
         replace=False,
-        n_samples=int(max(flooding_class.shape[0],impersonation_class.shape[0])),
+        n_samples=int(sum((flooding_class.shape[0],impersonation_class.shape[0]))/2),
         random_state=42
         )
 
@@ -60,15 +60,79 @@ def underSample(df):
     output_file_path = os.path.join(AWID_DOWNSAMPLED)
     print(f"Saving dataset to {output_file_path}")
     df_balanced.to_csv(output_file_path, index=False)
+    return df_balanced
 
+binary_map = {
+    'Normal'        : "Normal",
+    'Flooding'      : "Attack",
+    'Impersonation' : "Attack",
+}
+
+def mapToBinary(df):
+    df["Label"] = df['Label'].map(binary_map)
+    return df
+
+def undersampleBinary(df, suffix= ""):
+    # Separate the classes
+    normal_class = df[df['Label'] == "Normal"]
+    attack_class = df[df['Label'] == "Attack"]
+
+    # Downsample to match number of "attack" frames
+    downsampled_class = resample(
+        normal_class,
+        replace=False,
+        n_samples=int(attack_class.shape[0]),
+        random_state=42
+        )
+
+    # Combine the downsampled normal class with the other classes
+    df_balanced = pd.concat([downsampled_class, attack_class])
+    # Shuffle the resulting dataset
+    df_balanced = df_balanced.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    print(f"Balanced dataset class distribution:\n{df_balanced['Label'].value_counts()}")
+    output_file_path = os.path.join(AWID_DOWNSAMPLED+suffix)
+    print(f"Saving dataset to {output_file_path}")
+    df_balanced.to_csv(output_file_path, index=False)
+    return df_balanced
+
+def dropImpersonationAndUndersample(df, suffix= ""):
+    # Separate the classes
+    normal_class = df[df['Label'] == "Normal"]
+    flooding_class = df[df['Label'] == "Flooding"]
+
+    # Downsample to match number of "attack" frames
+    downsampled_class = resample(
+        normal_class,
+        replace=False,
+        n_samples=int(flooding_class.shape[0]),
+        random_state=42
+        )
+
+    # Combine the downsampled normal class with the other classes
+    df_balanced = pd.concat([downsampled_class, flooding_class])
+    # Shuffle the resulting dataset
+    df_balanced = df_balanced.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    print(f"Balanced dataset class distribution:\n{df_balanced['Label'].value_counts()}")
+    output_file_path = os.path.join(AWID_DOWNSAMPLED+suffix)
+    print(f"Saving dataset to {output_file_path}")
+    df_balanced.to_csv(output_file_path, index=False)
+    return df_balanced
 
 
 ### ---------------- Start ----------------
 
-#df = pd.read_csv(os.path.join(AWID_SCALED))
-#df = oneHotEncodeAWID3(df)
-df = pd.read_csv(os.path.join(AWID_READY))
-df = underSample(df)
+df = pd.read_csv(os.path.join(AWID_SCALED))
+df = oneHotEncodeAWID3(df)
+# df = pd.read_csv(os.path.join(AWID_READY))
+# df = underSample(df)
+
+# df = mapToBinary(df)
+# undersampleBinary(df, "_BIN")
+
+dropImpersonationAndUndersample(df, "_NF")
+
 
 # for x in df.columns:
 #     print(df[x].dtype)

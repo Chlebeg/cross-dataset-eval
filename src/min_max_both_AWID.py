@@ -3,7 +3,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 FEATURES_MIN_MAX_SCALING = ["frame.len", "radiotap.length", "radiotap.dbm_antsignal", "wlan.duration"]
 
-ROOT = "D:/"
+ROOT = "/home/test"
 AWID2_MERGED = ROOT + "/AWID2/AWID2_merged"
 AWID3_MERGED = ROOT + "/AWID3/AWID3_merged"
 AWID2_SCALED = ROOT + "/AWID2/AWID2_scaled"
@@ -38,4 +38,3 @@ print(f"Saving dataset to {AWID2_SCALED}")
 awid2_scaled.to_csv(AWID2_SCALED, index=False)
 print(f"Saving dataset to {AWID3_SCALED}")
 awid3_scaled.to_csv(AWID3_SCALED, index=False)
-
